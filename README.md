@@ -1,0 +1,37 @@
+# OmniOrder Lab
+
+Laboratorio de comercio omnicanal para demostrar una orden única desde Web, POS, WhatsApp y audio, con trazabilidad hacia operación (Simphony) y facturación (STS Gen 2).
+
+## Alcance de esta primera versión
+
+- Interfaz demostrable de captura de pedidos por Web, POS y WhatsApp.
+- Flujo de audio: transcripción del navegador o entrada manual, interpretación y sugerencia comercial.
+- Lista unificada de órdenes, estados e indicadores de integración simulados.
+- Sin conexión a cuentas personales de WhatsApp ni datos de clientes reales.
+
+## Principios no negociables
+
+1. **Una orden canónica:** todos los canales producen el mismo contrato de orden.
+2. **Confirmación explícita:** la IA puede entender y sugerir; no crea una venta ni factura sin aprobación.
+3. **Integraciones aisladas:** STS Gen 2 y Simphony se consumen únicamente mediante adaptadores versionados.
+4. **Datos mínimos:** el demo no requiere PII real ni credenciales de producción.
+5. **Trazabilidad:** cada transición debe emitir un evento auditable, con correlación e idempotencia.
+
+## Documentación
+
+- [Arquitectura y seguridad](docs/ARCHITECTURE.md)
+- [Guía de QA funcional](docs/QA-FUNCTIONAL.md)
+- [Backlog de evolución](docs/ROADMAP.md)
+
+## Ejecución local
+
+Este proyecto usa el runtime web incluido en su entorno. Una vez instaladas las dependencias:
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+## Límites del demo
+
+WhatsApp personal puede utilizarse para enviar un mensaje real durante la presentación, pero se registra manualmente en el laboratorio. La automatización futura debe usar la plataforma oficial de WhatsApp Business con un número de negocio dedicado.
