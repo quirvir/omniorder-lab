@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 
-type Config = { apiBaseUrl:string; oidcBaseUrl:string; clientId:string; username:string; password:string; orgShortName:string; locRef:string; rvcRef:string; employeeRef:string; orderTypeRef:string; orderChannelRef?:string; menuId?:string; menuItemId?:string; quantity?:string };
+type Config = { apiBaseUrl:string; oidcBaseUrl:string; clientId:string; username:string; password:string; orgShortName:string; locRef:string; rvcRef:string; employeeRef:string; orderTypeRef:string; orderChannelRef?:string; tenderId?:string; menuId?:string; menuItemId?:string; quantity?:string };
 type Modifier = { condimentId:number; definitionSequence:number; name:string; price:number };
 type ModifierGroup = { id:number; name:string; minimumCount:number; maximumCount:number; items:Modifier[] };
 type CatalogItem = { menuItemId:number; objNum:number; definitionSequence:number; name:string; description:string; price:number; imageUrl?:string; imageAlt?:string; modifierGroups:ModifierGroup[] };
 type DraftItem = { menuItemId:number; definitionSequence:number; quantity:number; condiments?:{condimentId:number;definitionSequence:number;quantity:number}[] };
-type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[]} };
+type Tender = { tenderId:number; name:string; type:string };
+type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"tenders"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[]} };
 type Session = { config:Config; catalog:CatalogItem[]; expiresAt:number };
 
 const sessions = new Map<string, Session>();
@@ -22,6 +23,13 @@ export async function POST(request: Request) {
     validate(config);
     const token = await authenticate(config);
     if (body.action === "test") return result(await api(config, token, `/organizations/${encodeURIComponent(config.orgShortName)}/locations/${encodeURIComponent(config.locRef)}/revenueCenters/${encodeURIComponent(config.rvcRef)}`), "Conexion autenticada y Revenue Center validado.");
+    if (body.action === "tenders") {
+      const response = await api(config, token, `/tenders/collection?orgShortName=${encodeURIComponent(config.orgShortName)}&locRef=${encodeURIComponent(config.locRef)}&rvcRef=${encodeURIComponent(config.rvcRef)}`);
+      const data = await json(response);
+      if (!response.ok) return NextResponse.json({ ok:false, status:response.status, message:"Simphony no pudo devolver los tenders de este RVC.", data }, { status:response.status });
+      const tenders = normalizeTenders(data);
+      return NextResponse.json({ ok:true, status:response.status, message:`${tenders.length} tender(s) disponibles para este RVC. Selecciona serviceTotal para enviar el demo sin pago.`, tenders, data });
+    }
     if (body.action === "menuSummary") return result(await menuApi(config, token, "/menus/summary"), "Resumen de menus recibido.");
     if (body.action === "menu" || body.action === "activateMenu") {
       if (!config.menuId) throw new Error("Ingresa el menuId que deseas sincronizar.");
@@ -51,11 +59,12 @@ async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
 }
 
 async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}) {
-  if (!config.employeeRef || !config.orderTypeRef) throw new Error("La sesion necesita checkEmployeeRef y orderTypeRef para crear un check.");
+  if (!config.employeeRef || !config.orderTypeRef || !config.tenderId) throw new Error("La sesion necesita checkEmployeeRef, orderTypeRef y tenderId para crear un check.");
   const informationLines = (draft.informationLines || []).map(line => line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
   const payload = {
     header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName:`WEB-${Date.now().toString().slice(-10)}`, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
     menuItems:draft.items.map(item => ({ menuItemId:item.menuItemId, definitionSequence:item.definitionSequence, quantity:item.quantity, ...(item.condiments?.length ? { condiments:item.condiments } : {}) })),
+    tenders:[{ tenderId:Number(config.tenderId), total:0 }],
   };
   const response = await api(config, token, "/checks", { method:"POST", body:JSON.stringify(payload), headers:{ "Content-Type":"application/json", "Simphony-Features":"detect-duplicate-request,enable-condiment-prefix" } });
   const data = await json(response);
@@ -76,6 +85,11 @@ function normalizeMenu(value:unknown):CatalogItem[] {
     const rules=asArray(definition.condimentGroupRules).map(rule => { const r=record(rule); const id=numberOf(r.condimentGroupRef); const group=groupById.get(id) || {}; const refs=asArray(group.condimentItemRefs ?? group.condimentItems ?? group.items); const items=refs.map(ref => { const rr=record(ref); const condiment=condiments.get(numberOf(rr.condimentItemRef ?? rr.condimentId ?? rr.id)) || {}; const condimentDefinition=record(asArray(condiment.definitions).find(candidate => numberOf(record(candidate).definitionSequence)===numberOf(rr.definitionSequence)) ?? asArray(condiment.definitions)[0]); return { condimentId:numberOf(rr.condimentItemRef ?? rr.condimentId ?? condiment.condimentId), definitionSequence:numberOf(rr.definitionSequence ?? condimentDefinition.definitionSequence), name:textOf(condimentDefinition.ConsumerContentProperties ? record(condimentDefinition.ConsumerContentProperties).consumerName : condimentDefinition.name) || textOf(condiment.name) || "Modificador", price:priceOf(condimentDefinition) }; }).filter(modifier => modifier.condimentId); return { id, name:textOf(group.consumerName) || textOf(group.name) || "Personaliza tu producto", minimumCount:numberOf(r.minimumCount), maximumCount:numberOf(r.maximumCount), items }; }).filter(group => group.id && group.items.length);
     return { menuItemId:numberOf(row.menuItemId), objNum:numberOf(row.objNum ?? row.obj_num ?? row.objectNumber ?? row.menuItemId), definitionSequence:numberOf(definition.definitionSequence), name:textOf(consumer.consumerName) || textOf(definition.name) || textOf(row.name) || `Producto ${row.menuItemId}`, description:textOf(consumer.consumerDescription) || textOf(definition.consumerDescription) || "Producto disponible en Simphony", price:priceOf(definition), imageUrl:image?.url, imageAlt:image?.altText, modifierGroups:rules };
   }).filter(item => item.menuItemId && item.name);
+}
+
+function normalizeTenders(value:unknown):Tender[] {
+  const root=record(value); const values=asArray(root.tenders ?? root.items ?? root.collection ?? value);
+  return values.map(item=>{const row=record(item);return { tenderId:numberOf(row.tenderId ?? row.id ?? row.tenderRef), name:textOf(row.name ?? row.tenderName ?? row.displayName) || "Tender", type:textOf(row.type ?? row.tenderType ?? row.serviceType) || "payment" };}).filter(tender=>tender.tenderId);
 }
 
 function record(value:unknown):Record<string,unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string,unknown> : {}; }
