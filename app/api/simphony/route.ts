@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       if (body.action === "menu") return NextResponse.json({ ok:true, status:response.status, message:`Menu sincronizado: ${catalog.length} productos listos para e-commerce.`, catalog, data });
       const sessionId = crypto.randomUUID();
       sessions.set(sessionId, { config, catalog, expiresAt:Date.now() + SESSION_TTL_MS });
-      return NextResponse.json({ ok:true, message:`Catalogo activo para esta sesion (${catalog.length} productos). Las credenciales quedan solo en memoria por 30 minutos.`, sessionId, catalog });
+      return NextResponse.json({ ok:true, status:response.status, message:`Catalogo activo para esta sesion (${catalog.length} productos). Las credenciales quedan solo en memoria por 30 minutos.`, sessionId, catalog });
     }
     if (body.action === "trainingCheck") {
       if (!config.menuItemId) throw new Error("Completa menuItemId antes de crear el training check.");
