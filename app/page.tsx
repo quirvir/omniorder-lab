@@ -93,7 +93,7 @@ export default function Home() {
   return (
     <main>
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">O</span><span>OmniOrder <b>Lab</b></span></div>
+        <div className="brand"><img src="/oracle-redwood.svg" alt="Oracle" /><span className="brand-divider" /><span className="product-name">OmniOrder Lab</span></div>
         <div className="environment"><span className="dot" /> ENTORNO DEMO SEGURO</div>
         <a className="operator" href="/admin">Admin Simphony</a>
       </header>

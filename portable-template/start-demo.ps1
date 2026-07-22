@@ -2,12 +2,24 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $node = Join-Path $root "runtime\node.exe"
 $cli = Join-Path $root "app\node_modules\vinext\dist\cli.js"
+$staticCache = Join-Path $root "app\node_modules\vinext\dist\server\static-file-cache.js"
 $runDir = Join-Path $root "run"
 $pidFile = Join-Path $runDir "omniorder.pid"
 
 if (-not (Test-Path $node) -or -not (Test-Path $cli)) {
   throw "El kit está incompleto. Extrae todo el ZIP antes de ejecutar este archivo."
 }
+# Vinext genera rutas con separadores de Windows en su caché de archivos estáticos.
+# Normalizarlas permite servir CSS y JavaScript desde /assets en equipos Windows.
+if (Test-Path $staticCache) {
+  $cacheSource = Get-Content -LiteralPath $staticCache -Raw
+  $before = 'relativePath: path.relative(base, batch[j]),'
+  $after = 'relativePath: path.relative(base, batch[j]).split(path.sep).join("/"),'
+  if ($cacheSource.Contains($before)) {
+    Set-Content -LiteralPath $staticCache -Value $cacheSource.Replace($before, $after) -Encoding UTF8
+  }
+}
+
 if (Test-Path $pidFile) {
   $existing = Get-Content $pidFile
   if (Get-Process -Id $existing -ErrorAction SilentlyContinue) {
