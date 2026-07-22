@@ -32,6 +32,12 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+## Admin local de Simphony
+
+Con el proyecto corriendo, abre `/admin`. El panel solicita los valores de STS Gen2 Services URL, OpenID Provider URL, Client ID, cuenta API y el contexto `orgShortName`, `locRef` y `rvcRef`.
+
+Las credenciales se usan sólo para la solicitud que ejecutas: no se persisten, no se muestran en el resultado y no se escriben en Git. El orden seguro de prueba es: validar autenticación/RVC, consultar el resumen de menús, sincronizar un menú, validar los `menuItemId` cuyo nombre contiene `hamburguesa` y, sólo entonces, crear un `isTrainingCheck`.
+
 ## Límites del demo
 
 WhatsApp personal puede utilizarse para enviar un mensaje real durante la presentación, pero se registra manualmente en el laboratorio. La automatización futura debe usar la plataforma oficial de WhatsApp Business con un número de negocio dedicado.

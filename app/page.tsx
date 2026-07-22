@@ -95,7 +95,7 @@ export default function Home() {
       <header className="topbar">
         <div className="brand"><span className="brand-mark">O</span><span>OmniOrder <b>Lab</b></span></div>
         <div className="environment"><span className="dot" /> ENTORNO DEMO SEGURO</div>
-        <button className="operator">Operador demo</button>
+        <a className="operator" href="/admin">Admin Simphony</a>
       </header>
 
       <section className="hero">
