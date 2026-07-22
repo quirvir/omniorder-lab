@@ -9,7 +9,7 @@ type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|
 type Session = { config:Config; catalog:CatalogItem[]; expiresAt:number };
 
 const sessions = new Map<string, Session>();
-const SESSION_TTL_MS = 30 * 60 * 1000;
+const SESSION_TTL_MS = 60 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
