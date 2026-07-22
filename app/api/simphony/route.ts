@@ -22,12 +22,12 @@ export async function POST(request: Request) {
     validate(config);
     const token = await authenticate(config);
     if (body.action === "test") return result(await api(config, token, `/organizations/${encodeURIComponent(config.orgShortName)}/locations/${encodeURIComponent(config.locRef)}/revenueCenters/${encodeURIComponent(config.rvcRef)}`), "Conexion autenticada y Revenue Center validado.");
-    if (body.action === "menuSummary") return result(await api(config, token, "/menus/summary"), "Resumen de menus recibido.");
+    if (body.action === "menuSummary") return result(await menuApi(config, token, "/menus/summary"), "Resumen de menus recibido.");
     if (body.action === "menu" || body.action === "activateMenu") {
       if (!config.menuId) throw new Error("Ingresa el menuId que deseas sincronizar.");
-      const response = await api(config, token, `/menus/${encodeURIComponent(config.menuId)}`);
+      const response = await menuApi(config, token, `/menus/${encodeURIComponent(config.menuId)}`);
       const data = await json(response);
-      if (!response.ok) return NextResponse.json({ ok:false, status:response.status, message:"Simphony no pudo devolver el menu.", data }, { status:response.status });
+      if (!response.ok) return NextResponse.json({ ok:false, status:response.status, message:`Simphony no pudo devolver el menu ${config.menuId} (HTTP ${response.status}). Verifica que sea el menuId exacto expuesto por STS para este RVC.`, data }, { status:response.status });
       const catalog = normalizeMenu(data);
       if (body.action === "menu") return NextResponse.json({ ok:true, status:response.status, message:`Menu sincronizado: ${catalog.length} productos listos para e-commerce.`, catalog, data });
       const sessionId = crypto.randomUUID();
@@ -94,6 +94,8 @@ async function authenticate(c:Config) {
   const signin=await fetch(`${oidc}/oauth2/signin`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded",Cookie:cookie},body:new URLSearchParams({username:c.username,password:c.password,orgname:c.orgShortName})}); const signed=await json(signin) as {redirectUrl?:string;success?:boolean;message?:string}; if(!signin.ok||!signed.success||!signed.redirectUrl) throw new Error(signed.message||"Inicio de sesion rechazado por Simphony."); const code=new URL(signed.redirectUrl).searchParams.get("code"); if(!code) throw new Error("Simphony no devolvio el codigo de autorizacion."); const token=await fetch(`${oidc}/oauth2/token`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded",Cookie:cookie},body:new URLSearchParams({scope:"openid",grant_type:"authorization_code",client_id:c.clientId,code_verifier:verifier,code,redirect_uri:"apiaccount://callback"})}); const data=await json(token) as {id_token?:string;message?:string}; if(!token.ok||!data.id_token) throw new Error(data.message||"No fue posible obtener el token de Simphony."); return data.id_token;
 }
 async function api(c:Config,token:string,path:string,init:RequestInit={}) { const headers=new Headers(init.headers); headers.set("Authorization",`Bearer ${token}`); headers.set("Accept","application/json"); headers.set("Simphony-OrgShortName",c.orgShortName); headers.set("Simphony-LocRef",c.locRef); headers.set("Simphony-RvcRef",c.rvcRef); return fetch(`${trim(c.apiBaseUrl)}${path}`,{...init,headers}); }
+async function menuApi(c:Config,token:string,path:string) { const configured=trim(c.apiBaseUrl); const v2=configured.replace(/\/api\/v1$/i,"/api/v2"); const bases=[v2,configured].filter((base,index,all)=>all.indexOf(base)===index); let last:Response|undefined; for(const base of bases){ const headers=new Headers({Authorization:`Bearer ${token}`,Accept:"application/json","Simphony-OrgShortName":c.orgShortName,"Simphony-LocRef":c.locRef,"Simphony-RvcRef":c.rvcRef}); const response=await fetch(`${base}${path}`,{headers}); if(response.ok) return response; last=response; } return last!;
+}
 async function result(response:Response,message:string) { const data=await json(response); return NextResponse.json({ok:response.ok,status:response.status,message,data},{status:response.ok?200:response.status}); }
 async function json(response:Response):Promise<unknown> { const text=await response.text(); try{return text?JSON.parse(text):{};}catch{return {raw:text};} }
 function trim(value:string){return value.replace(/\/+$/,"");} function base64Url(bytes:Uint8Array){return btoa(String.fromCharCode(...bytes)).replaceAll("+","-").replaceAll("/","_").replaceAll("=","");}
