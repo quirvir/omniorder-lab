@@ -1,160 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import "./commerce.css";
 
-type Channel = "Web" | "WhatsApp" | "POS";
-type Stage = "Borrador" | "Confirmada" | "En preparación" | "Facturada";
+type Channel = "Web"|"WhatsApp"|"POS";
+type Modifier = { condimentId:number; definitionSequence:number; name:string; price:number };
+type ModifierGroup = { id:number; name:string; minimumCount:number; maximumCount:number; items:Modifier[] };
+type Product = { menuItemId:number; definitionSequence:number; name:string; description:string; price:number; imageUrl?:string; imageAlt?:string; modifierGroups:ModifierGroup[] };
+type CartLine = { key:string; product:Product; quantity:number; modifiers:Modifier[] };
 
-type Order = {
-  id: string;
-  channel: Channel;
-  customer: string;
-  items: string;
-  total: number;
-  stage: Stage;
-  createdAt: string;
-};
-
-const initialOrders: Order[] = [
-  { id: "ORD-1042", channel: "Web", customer: "María López", items: "Combo clásico × 2", total: 138, stage: "En preparación", createdAt: "Hace 3 min" },
-  { id: "ORD-1041", channel: "WhatsApp", customer: "Carlos Ruiz", items: "Pollo crispy + bebida", total: 79, stage: "Confirmada", createdAt: "Hace 7 min" },
-  { id: "ORD-1040", channel: "POS", customer: "Consumidor final", items: "Café americano × 2", total: 46, stage: "Facturada", createdAt: "Hace 12 min" },
+const demoCatalog:Product[]=[
+  {menuItemId:1,definitionSequence:0,name:"Combo clasico",description:"Hamburguesa, papas y bebida",price:69,modifierGroups:[]},
+  {menuItemId:2,definitionSequence:0,name:"Pollo crispy",description:"Pollo crujiente, papas y salsa",price:59,modifierGroups:[]},
+  {menuItemId:3,definitionSequence:0,name:"Cafe americano",description:"Tueste local, 12 oz",price:23,modifierGroups:[]},
 ];
 
-const catalog = [
-  { name: "Combo clásico", price: 69, description: "Hamburguesa, papas y bebida" },
-  { name: "Pollo crispy", price: 59, description: "Pollo crujiente, papas y salsa" },
-  { name: "Café americano", price: 23, description: "Tueste local, 12 oz" },
-];
-
-function stageClass(stage: Stage) {
-  return stage.toLowerCase().replaceAll(" ", "-");
-}
-
-export default function Home() {
-  const [channel, setChannel] = useState<Channel>("Web");
-  const [selected, setSelected] = useState(0);
-  const [customer, setCustomer] = useState("Ana Morales");
-  const [orders, setOrders] = useState(initialOrders);
-  const [notice, setNotice] = useState("Listo para recibir una orden omnicanal.");
-  const [voiceText, setVoiceText] = useState("");
-  const [listening, setListening] = useState(false);
-
-  const active = catalog[selected];
-  const stats = useMemo(() => ({
-    total: orders.length,
-    active: orders.filter((order) => order.stage !== "Facturada").length,
-    whatsapp: orders.filter((order) => order.channel === "WhatsApp").length,
-    revenue: orders.reduce((sum, order) => sum + order.total, 0),
-  }), [orders]);
-
-  function createOrder(source = channel, itemName = active.name, amount = active.price) {
-    const order: Order = {
-      id: `ORD-${1043 + orders.length}`,
-      channel: source,
-      customer: customer || "Consumidor final",
-      items: itemName,
-      total: amount,
-      stage: "Confirmada",
-      createdAt: "Ahora",
-    };
-    setOrders((current) => [order, ...current]);
-    setNotice(`${order.id} creada. Evento sellado y enviado a adaptadores STS Gen 2 y Simphony (modo demo).`);
-  }
-
-  function processVoice() {
-    const clean = voiceText.trim();
-    if (!clean) {
-      setNotice("Escribe o dicta un pedido primero para que el asistente pueda interpretarlo.");
-      return;
-    }
-    const lower = clean.toLowerCase();
-    const match = catalog.find((item) => lower.includes(item.name.toLowerCase().split(" ")[0]));
-    const item = match ?? catalog[0];
-    setChannel("WhatsApp");
-    setSelected(catalog.indexOf(item));
-    setNotice(`Entendido: ${item.name}. Sugerencia generada: agrega una bebida por Q20. Confirma para crear la orden.`);
-  }
-
-  function listen() {
-    const Recognition = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : undefined;
-    if (!Recognition) {
-      setNotice("Tu navegador no expone reconocimiento de voz. Puedes escribir el audio transcrito para el demo.");
-      return;
-    }
-    const recognition = new Recognition();
-    recognition.lang = "es-GT";
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
-    recognition.onresult = (event: SpeechRecognitionEvent) => setVoiceText(event.results[0][0].transcript);
-    recognition.start();
-  }
-
-  return (
-    <main>
-      <header className="topbar">
-        <div className="brand"><img src="/oracle-redwood.svg" alt="Oracle" /><span className="brand-divider" /><span className="product-name">OmniOrder Lab</span></div>
-        <div className="environment"><span className="dot" /> ENTORNO DEMO SEGURO</div>
-        <a className="operator" href="/admin">Admin Simphony</a>
-      </header>
-
-      <section className="hero">
-        <div>
-          <p className="eyebrow">COMERCIO + OPERACIÓN + FACTURACIÓN</p>
-          <h1>Una orden. Cualquier canal.<br /><em>Una sola operación.</em></h1>
-          <p className="hero-copy">Laboratorio de comercio omnicanal para demostrar cómo una venta web, POS, WhatsApp o voz conserva su trazabilidad hasta operación y facturación.</p>
-        </div>
-        <aside className="trust-card"><span>Arquitectura orientada a eventos</span><strong>Canales desacoplados.<br />Datos auditables.</strong><small>Adaptadores aislados para STS Gen 2 y Simphony</small></aside>
-      </section>
-
-      <section className="metrics" aria-label="Métricas operativas">
-        <div><small>Órdenes hoy</small><strong>{stats.total}</strong><span>+3 demo</span></div>
-        <div><small>En operación</small><strong>{stats.active}</strong><span>flujo central</span></div>
-        <div><small>Canal WhatsApp</small><strong>{stats.whatsapp}</strong><span>texto y voz</span></div>
-        <div><small>Venta consolidada</small><strong>Q{stats.revenue}</strong><span>todos los canales</span></div>
-      </section>
-
-      <section className="workspace">
-        <article className="panel order-panel">
-          <div className="panel-heading"><div><p className="eyebrow">NUEVA ORDEN</p><h2>Canal de entrada</h2></div><span className="secure-label">● validación activa</span></div>
-          <div className="channel-tabs" role="tablist">
-            {(["Web", "WhatsApp", "POS"] as Channel[]).map((item) => <button key={item} onClick={() => setChannel(item)} className={channel === item ? "active" : ""}>{item === "WhatsApp" ? "◔ " : ""}{item}</button>)}
-          </div>
-          <label>Cliente <input value={customer} onChange={(event) => setCustomer(event.target.value)} aria-label="Cliente" /></label>
-          <p className="field-title">Menú disponible</p>
-          <div className="products">
-            {catalog.map((item, index) => <button key={item.name} onClick={() => setSelected(index)} className={selected === index ? "product selected" : "product"}><span><b>{item.name}</b><small>{item.description}</small></span><strong>Q{item.price}</strong></button>)}
-          </div>
-          <div className="summary"><span>{active.name}</span><strong>Q{active.price}</strong></div>
-          <button className="primary" onClick={() => createOrder()}>Confirmar orden de {channel} <span>→</span></button>
-        </article>
-
-        <article className="panel voice-panel">
-          <div className="panel-heading"><div><p className="eyebrow">ASISTENTE CONVERSACIONAL</p><h2>Pedido por audio</h2></div><span className="voice-badge">Voz + IA</span></div>
-          <div className="voice-orb"><div className={listening ? "orb listening" : "orb"}>⌁</div><p>{listening ? "Escuchando…" : "Envía una nota de voz"}</p><small>“Quiero dos hamburguesas sin cebolla para recoger.”</small></div>
-          <textarea value={voiceText} onChange={(event) => setVoiceText(event.target.value)} placeholder="Transcripción del audio o pedido de prueba…" aria-label="Transcripción del pedido por audio" />
-          <div className="voice-actions"><button onClick={listen} className="secondary">{listening ? "Escuchando…" : "Usar micrófono"}</button><button onClick={processVoice} className="secondary">Interpretar pedido</button></div>
-          <div className="assistant-message"><span>✦</span><p><b>Asistente:</b> Identifico productos, restricciones y modalidad. Sugiero complementos según catálogo aprobado, nunca confirmo sin validación explícita.</p></div>
-        </article>
-      </section>
-
-      <section className="flow-strip"><div><span>01</span><b>Entrada</b><small>{channel} / Voz</small></div><i>→</i><div><span>02</span><b>Orden canónica</b><small>idempotencia y validación</small></div><i>→</i><div><span>03</span><b>Operación</b><small>Adaptador Simphony</small></div><i>→</i><div><span>04</span><b>Facturación</b><small>Adaptador STS Gen 2</small></div><i>→</i><div><span>05</span><b>Auditoría</b><small>evento inmutable</small></div></section>
-
-      <section className="operations">
-        <div className="section-heading"><div><p className="eyebrow">CONTROL OPERATIVO</p><h2>Órdenes consolidadas</h2></div><p>{notice}</p></div>
-        <div className="table-wrap"><table><thead><tr><th>Orden</th><th>Canal</th><th>Cliente</th><th>Detalle</th><th>Total</th><th>Estado</th><th>Integración</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td><b>{order.id}</b><small>{order.createdAt}</small></td><td><span className={`channel-chip ${order.channel.toLowerCase()}`}>{order.channel}</span></td><td>{order.customer}</td><td>{order.items}</td><td><b>Q{order.total}</b></td><td><span className={`stage ${stageClass(order.stage)}`}>{order.stage}</span></td><td><span className="integration">STS ✓ &nbsp; Simphony ✓</span></td></tr>)}</tbody></table></div>
-      </section>
-
-      <footer><b>OmniOrder Lab</b><span>Demo sin datos de producción · contratos de integración versionados · acceso mínimo necesario</span></footer>
-    </main>
-  );
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognition;
-    webkitSpeechRecognition?: new () => SpeechRecognition;
-  }
-  interface SpeechRecognition { lang: string; onstart: (() => void) | null; onend: (() => void) | null; onresult: ((event: SpeechRecognitionEvent) => void) | null; start: () => void; }
-  interface SpeechRecognitionEvent { results: { [index: number]: { [index: number]: { transcript: string } } }; }
+export default function Home(){
+  const [channel,setChannel]=useState<Channel>("Web"); const [customer,setCustomer]=useState("Ana Morales"); const [catalog,setCatalog]=useState<Product[]>(demoCatalog); const [source,setSource]=useState<"demo"|"simphony">("demo"); const [sessionId,setSessionId]=useState<string>(); const [selectedId,setSelectedId]=useState(demoCatalog[0].menuItemId); const [cart,setCart]=useState<CartLine[]>([]); const [notes,setNotes]=useState(""); const [notice,setNotice]=useState("Activa tu catalogo desde Admin Simphony para vender productos reales."); const [busy,setBusy]=useState(false);
+  useEffect(()=>{const id=sessionStorage.getItem("omniorder.simphonySession"); if(!id)return; setSessionId(id); void loadCatalog(id);},[]);
+  const selected=catalog.find(item=>item.menuItemId===selectedId)||catalog[0];
+  const total=useMemo(()=>cart.reduce((sum,line)=>sum+(line.product.price+line.modifiers.reduce((a,m)=>a+m.price,0))*line.quantity,0),[cart]);
+  const count=useMemo(()=>cart.reduce((sum,line)=>sum+line.quantity,0),[cart]);
+  async function loadCatalog(id:string){setBusy(true);try{const response=await fetch("/api/simphony",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"catalog",sessionId:id})});const data=await response.json();if(!data.ok)throw new Error(data.message);const items=data.catalog as Product[];if(!items.length)throw new Error("El menu no expuso productos vendibles.");setCatalog(items);setSelectedId(items[0].menuItemId);setSource("simphony");setNotice(`Catalogo real cargado: ${items.length} productos desde Simphony.`);}catch(error){sessionStorage.removeItem("omniorder.simphonySession");setSessionId(undefined);setNotice(error instanceof Error?error.message:"No fue posible cargar el catalogo.");}finally{setBusy(false);}}
+  function addProduct(product=selected){if(!product)return; const key=String(product.menuItemId);setCart(current=>{const found=current.find(line=>line.key===key);return found?current.map(line=>line.key===key?{...line,quantity:line.quantity+1}:line):[...current,{key,product,quantity:1,modifiers:[]}];});setNotice(`${product.name} agregado. Personalizalo antes de confirmar.`);}
+  function changeQuantity(key:string,delta:number){setCart(current=>current.flatMap(line=>line.key===key?(line.quantity+delta>0?[{...line,quantity:line.quantity+delta}]:[]):[line]));}
+  function toggleModifier(lineKey:string,group:ModifierGroup,modifier:Modifier){setCart(current=>current.map(line=>{if(line.key!==lineKey)return line;const exists=line.modifiers.some(item=>item.condimentId===modifier.condimentId&&item.definitionSequence===modifier.definitionSequence);const other=line.modifiers.filter(item=>item.condimentId!==modifier.condimentId||item.definitionSequence!==modifier.definitionSequence);if(exists)return {...line,modifiers:other};const sameGroup=group.items.some(item=>item.condimentId===modifier.condimentId);const currentInGroup=line.modifiers.filter(item=>group.items.some(groupItem=>groupItem.condimentId===item.condimentId));if(group.maximumCount===1&&sameGroup)return {...line,modifiers:[...line.modifiers.filter(item=>!currentInGroup.includes(item)),modifier]};if(group.maximumCount>0&&currentInGroup.length>=group.maximumCount){setNotice(`Solo puedes seleccionar ${group.maximumCount} opcion(es) en ${group.name}.`);return line;}return {...line,modifiers:[...line.modifiers,modifier]};}));}
+  async function confirm(){if(!cart.length){setNotice("Agrega al menos un producto al pedido.");return;}if(source==="demo"||!sessionId){setNotice(`Orden demo confirmada para ${customer||"Consumidor final"}. Activa el catalogo Simphony para postearla al lab.`);setCart([]);return;}setBusy(true);try{const response=await fetch("/api/simphony",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"createTrainingCheck",sessionId,draft:{items:cart.map(line=>({menuItemId:line.product.menuItemId,definitionSequence:line.product.definitionSequence,quantity:line.quantity,condiments:line.modifiers.map(modifier=>({condimentId:modifier.condimentId,definitionSequence:modifier.definitionSequence,quantity:1}))})),informationLines:[`Cliente: ${customer||"Consumidor final"}`,notes]} })});const data=await response.json();if(!data.ok)throw new Error(data.message);setNotice("Training check creado en Simphony. Revisa tu workstation o el resultado del Admin.");setCart([]);setNotes("");}catch(error){setNotice(error instanceof Error?error.message:"Simphony rechazo la orden.");}finally{setBusy(false);}}
+  return <main><header className="topbar"><div className="brand"><img src="/oracle-redwood.svg" alt="Oracle"/><span className="brand-divider"/><span className="product-name">OmniOrder Lab</span></div><div className="environment"><span className="dot"/> {source==="simphony"?"CATALOGO SIMPHONY ACTIVO":"ENTORNO DEMO SEGURO"}</div><a className="operator" href="/admin">Admin Simphony</a></header>
+    <section className="hero commerce-hero"><div><p className="eyebrow">COMERCIO OMNICANAL PARA SIMPHONY</p><h1>El menu real.<br/><em>La orden correcta.</em></h1><p className="hero-copy">Productos, imagenes, modificadores y notas del cliente llegan desde el flujo del menu configurado en Simphony STS Gen 2.</p></div><aside className="trust-card"><span>Sesion protegida</span><strong>Catalogo de Simphony.<br/>Credenciales en memoria.</strong><small>Training checks con trazabilidad omnicanal</small></aside></section>
+    <section className="workspace commerce-workspace"><article className="panel order-panel"><div className="panel-heading"><div><p className="eyebrow">{source==="simphony"?"MENU SINCRONIZADO":"CATALOGO DEMO"}</p><h2>Elige tus productos</h2></div><span className="secure-label">{busy?"sincronizando...":`${catalog.length} productos`}</span></div><div className="channel-tabs" role="tablist">{(["Web","WhatsApp","POS"] as Channel[]).map(item=><button key={item} onClick={()=>setChannel(item)} className={channel===item?"active":""}>{item}</button>)}</div><label>Cliente<input value={customer} onChange={event=>setCustomer(event.target.value)} aria-label="Cliente"/></label><div className="product-grid">{catalog.map(product=><button className={selected?.menuItemId===product.menuItemId?"menu-card selected":"menu-card"} key={product.menuItemId} onClick={()=>setSelectedId(product.menuItemId)}><span className="menu-image">{product.imageUrl?<img src={product.imageUrl} alt={product.imageAlt||product.name}/>:<span>🍽</span>}</span><span><b>{product.name}</b><small>{product.description}</small><strong>Q{product.price.toFixed(2)}</strong></span></button>)}</div><button className="secondary add-product" onClick={()=>addProduct()}>+ Agregar {selected?.name||"producto"}</button></article>
+      <article className="panel customization-panel"><div className="panel-heading"><div><p className="eyebrow">PERSONALIZA TU ORDEN</p><h2>Carrito y modificadores</h2></div><span className="voice-badge">{count} item(s)</span></div>{!cart.length?<p className="empty-cart">Selecciona un producto y usa “Agregar” para elegir cantidad, modificadores y notas.</p>:<div className="cart-lines">{cart.map(line=><div className="cart-line" key={line.key}><div><b>{line.product.name}</b><small>{line.modifiers.length?line.modifiers.map(item=>item.name).join(", "):"Sin modificadores"}</small></div><div className="stepper"><button onClick={()=>changeQuantity(line.key,-1)} aria-label="Quitar uno">−</button><b>{line.quantity}</b><button onClick={()=>changeQuantity(line.key,1)} aria-label="Agregar uno">+</button></div>{line.product.modifierGroups.map(group=><div className="modifier-group" key={group.id}><small>{group.name}{group.minimumCount>0?` · elige minimo ${group.minimumCount}`:""}</small><div>{group.items.map(modifier=>{const active=line.modifiers.some(item=>item.condimentId===modifier.condimentId&&item.definitionSequence===modifier.definitionSequence);return <button key={`${modifier.condimentId}-${modifier.definitionSequence}`} onClick={()=>toggleModifier(line.key,group,modifier)} className={active?"modifier active":"modifier"}>{active?"✓ ":"+ "}{modifier.name}{modifier.price?` · Q${modifier.price.toFixed(2)}`:""}</button>;})}</div></div>)}</div>)}</div>}<label className="note-field"><span>Nota del cliente (informationLines)</span><textarea value={notes} onChange={event=>setNotes(event.target.value)} maxLength={255} placeholder="Ej. Sin cebolla, recoger en 20 minutos."/></label><div className="summary"><span>{count} producto(s) · {channel}</span><strong>Q{total.toFixed(2)}</strong></div><button className="primary" onClick={()=>void confirm()} disabled={busy}>{busy?"Enviando...":source==="simphony"?"Confirmar training check":"Confirmar orden demo"}<span>→</span></button></article></section>
+    <section className="flow-strip"><div><span>01</span><b>{channel}</b><small>Canal de entrada</small></div><i>→</i><div><span>02</span><b>Menu real</b><small>Imagen y precio</small></div><i>→</i><div><span>03</span><b>Personalizacion</b><small>Modificadores</small></div><i>→</i><div><span>04</span><b>Notas</b><small>informationLines</small></div><i>→</i><div><span>05</span><b>Simphony</b><small>training check</small></div></section>
+    <section className="operations"><div className="section-heading"><div><p className="eyebrow">CONTROL OPERATIVO</p><h2>Estado de la orden</h2></div><p>{notice}</p></div></section><footer><b>OmniOrder Lab</b><span>Demo para Oracle Simphony · no usa datos de produccion</span></footer></main>;
 }
