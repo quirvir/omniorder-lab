@@ -32,6 +32,16 @@ if (Test-Path $pidFile) {
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 $process = Start-Process -FilePath $node -ArgumentList @($cli, "start", "--hostname", "127.0.0.1", "--port", "3000") -WorkingDirectory (Join-Path $root "app") -PassThru
 $process.Id | Set-Content $pidFile
-Start-Sleep -Seconds 3
+$ready = $false
+for ($attempt = 0; $attempt -lt 50 -and -not $ready; $attempt++) {
+  Start-Sleep -Milliseconds 200
+  try {
+    $client = New-Object System.Net.Sockets.TcpClient
+    $client.Connect("127.0.0.1", 3000)
+    $ready = $client.Connected
+    $client.Dispose()
+  } catch { }
+}
+if (-not $ready) { throw "El servidor no inició en 10 segundos. Revisa la ventana de PowerShell." }
 Start-Process "http://127.0.0.1:3000"
 Write-Host "OmniOrder Demo iniciado en http://127.0.0.1:3000"

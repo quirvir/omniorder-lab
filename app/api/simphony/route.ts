@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
-type Config = { apiBaseUrl:string; oidcBaseUrl:string; clientId:string; username:string; password:string; orgShortName:string; locRef:string; rvcRef:string; employeeRef:string; orderTypeRef:string; orderChannelRef?:string; tenderId?:string; menuId?:string; menuItemId?:string; quantity?:string };
+type Config = { apiBaseUrl:string; oidcBaseUrl:string; clientId:string; username:string; password:string; orgShortName:string; locRef:string; rvcRef:string; employeeRef:string; orderTypeRef:string; orderChannelRef?:string; tenderId?:string; enabledTenderIds?:string; tenderDisplayMode?:"configured"|"all"; menuId?:string; menuItemId?:string; quantity?:string };
 type Modifier = { condimentId:number; definitionSequence:number; name:string; price:number };
 type ModifierGroup = { id:number; name:string; minimumCount:number; maximumCount:number; items:Modifier[] };
 type CatalogItem = { menuItemId:number; objNum:number; definitionSequence:number; name:string; description:string; price:number; imageUrl?:string; imageAlt?:string; modifierGroups:ModifierGroup[] };
 type DraftItem = { menuItemId:number; definitionSequence:number; quantity:number; condiments?:{condimentId:number;definitionSequence:number;quantity:number}[] };
 type Tender = { tenderId:number; name:string; type:string };
-type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"tenders"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[]} };
-type Session = { config:Config; catalog:CatalogItem[]; expiresAt:number };
+type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"tenders"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[];tenderId?:number} };
+type Session = { config:Config; catalog:CatalogItem[]; tenders:Tender[]; expiresAt:number };
 
 const sessions = new Map<string, Session>();
 const SESSION_TTL_MS = 60 * 60 * 1000;
@@ -38,9 +38,14 @@ export async function POST(request: Request) {
       if (!response.ok) return NextResponse.json({ ok:false, status:response.status, message:`Simphony no pudo devolver el menu ${config.menuId} (HTTP ${response.status}). Verifica que sea el menuId exacto expuesto por STS para este RVC.`, data }, { status:response.status });
       const catalog = normalizeMenu(data);
       if (body.action === "menu") return NextResponse.json({ ok:true, status:response.status, message:`Menu sincronizado: ${catalog.length} productos listos para e-commerce.`, catalog, data });
+      const tenderResponse = await api(config, token, `/tenders/collection?orgShortName=${encodeURIComponent(config.orgShortName)}&locRef=${encodeURIComponent(config.locRef)}&rvcRef=${encodeURIComponent(config.rvcRef)}`);
+      const tenderData = await json(tenderResponse);
+      if (!tenderResponse.ok) return NextResponse.json({ ok:false, status:tenderResponse.status, message:"El menu fue leido, pero Simphony no pudo devolver los tenders del RVC. No se activó el e-commerce.", data:tenderData }, { status:tenderResponse.status });
+      const tenders = selectedTenders(normalizeTenders(tenderData), config);
+      if (!tenders.length) throw new Error("Selecciona al menos un tender habilitado antes de activar el e-commerce.");
       const sessionId = crypto.randomUUID();
-      sessions.set(sessionId, { config, catalog, expiresAt:Date.now() + SESSION_TTL_MS });
-      return NextResponse.json({ ok:true, status:response.status, message:`Catalogo activo para esta sesion (${catalog.length} productos). Las credenciales quedan solo en memoria por 30 minutos.`, sessionId, catalog });
+      sessions.set(sessionId, { config, catalog, tenders, expiresAt:Date.now() + SESSION_TTL_MS });
+      return NextResponse.json({ ok:true, status:response.status, message:`Catalogo activo para esta sesion (${catalog.length} productos, ${tenders.length} forma(s) de pago). Las credenciales quedan solo en memoria por una hora.`, sessionId, catalog, tenders });
     }
     if (body.action === "trainingCheck") {
       if (!config.menuItemId) throw new Error("Completa menuItemId antes de crear el training check.");
@@ -54,24 +59,27 @@ export async function POST(request: Request) {
 
 async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
   if (!draft?.items?.length) throw new Error("Agrega al menos un producto antes de enviar la orden.");
+  const tenderId=Number(draft.tenderId||session.config.tenderId);
+  if (!tenderId || !session.tenders.some(tender=>tender.tenderId===tenderId)) throw new Error("Selecciona una forma de pago habilitada para este e-commerce.");
   const token = await authenticate(session.config);
-  return postCheck(session.config, token, draft);
+  return postCheck(session.config, token, draft, tenderId);
 }
 
-async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}) {
-  if (!config.employeeRef || !config.orderTypeRef || !config.tenderId) throw new Error("La sesion necesita checkEmployeeRef, orderTypeRef y tenderId para crear un check.");
+async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId=Number(config.tenderId)) {
+  if (!config.employeeRef || !config.orderTypeRef) throw new Error("La sesion necesita checkEmployeeRef y orderTypeRef para crear un check.");
+  if (!Number.isFinite(tenderId) || tenderId<=0) throw new Error("El tender seleccionado no es valido.");
   const informationLines = (draft.informationLines || []).map(line => line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
   const payload = {
     header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName:`WEB-${Date.now().toString().slice(-10)}`, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
     menuItems:draft.items.map(item => ({ menuItemId:item.menuItemId, definitionSequence:item.definitionSequence, quantity:item.quantity, ...(item.condiments?.length ? { condiments:item.condiments } : {}) })),
-    tenders:[{ tenderId:Number(config.tenderId), total:0 }],
+    tenders:[{ tenderId, total:0 }],
   };
   const response = await api(config, token, "/checks", { method:"POST", body:JSON.stringify(payload), headers:{ "Content-Type":"application/json", "Simphony-Features":"detect-duplicate-request,enable-condiment-prefix" } });
   const data = await json(response);
   return NextResponse.json({ ok:response.ok, status:response.status, message:response.ok ? "Training check creado en Simphony." : "Simphony rechazo el training check.", data, payload }, { status:response.ok ? 200 : response.status });
 }
 
-function catalogResponse(session:Session) { return NextResponse.json({ ok:true, message:`Catalogo Simphony activo: ${session.catalog.length} productos.`, catalog:session.catalog, expiresAt:session.expiresAt }); }
+function catalogResponse(session:Session) { return NextResponse.json({ ok:true, message:`Catalogo Simphony activo: ${session.catalog.length} productos.`, catalog:session.catalog, tenders:session.tenders, expiresAt:session.expiresAt }); }
 function requireSession(sessionId?:string) { if (!sessionId) throw new Error("Primero activa un menu desde Admin Simphony."); const session=sessions.get(sessionId); if (!session || session.expiresAt<Date.now()) { sessions.delete(sessionId); throw new Error("La sesion de Simphony expiro. Activa nuevamente el menu desde Admin."); } return session; }
 
 function normalizeMenu(value:unknown):CatalogItem[] {
@@ -91,6 +99,7 @@ function normalizeTenders(value:unknown):Tender[] {
   const root=record(value); const values=asArray(root.tenders ?? root.items ?? root.collection ?? value);
   return values.map(item=>{const row=record(item);return { tenderId:numberOf(row.tenderId ?? row.id ?? row.tenderRef), name:textOf(row.name ?? row.tenderName ?? row.displayName) || "Tender", type:textOf(row.type ?? row.tenderType ?? row.serviceType) || "payment" };}).filter(tender=>tender.tenderId);
 }
+function selectedTenders(tenders:Tender[], config:Config):Tender[] { if(config.tenderDisplayMode==="all") return tenders; const enabled=new Set((config.enabledTenderIds||config.tenderId||"").split(",").map(value=>Number(value.trim())).filter(Boolean)); return tenders.filter(tender=>enabled.has(tender.tenderId)); }
 
 function record(value:unknown):Record<string,unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string,unknown> : {}; }
 function asArray(value:unknown):unknown[] { return Array.isArray(value) ? value : []; }
