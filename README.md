@@ -28,8 +28,8 @@ Laboratorio de comercio omnicanal para demostrar una orden única desde Web, POS
 Este proyecto usa el runtime web incluido en su entorno. Una vez instaladas las dependencias:
 
 ```powershell
-pnpm install --frozen-lockfile
-pnpm dev
+npm ci
+npm run dev
 ```
 
 ## Admin local de Simphony
