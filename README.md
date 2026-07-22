@@ -38,6 +38,10 @@ Con el proyecto corriendo, abre `/admin`. El panel solicita los valores de STS G
 
 Las credenciales se usan sólo para la solicitud que ejecutas: no se persisten, no se muestran en el resultado y no se escriben en Git. El orden seguro de prueba es: validar autenticación/RVC, consultar el resumen de menús, sincronizar un menú, validar los `menuItemId` cuyo nombre contiene `hamburguesa` y, sólo entonces, crear un `isTrainingCheck`.
 
+## Demo portable para Windows
+
+El directorio `portable-template` contiene los scripts que se incluyen en la distribución autocontenida de Windows. El kit final se extrae en la VM y se inicia con `start-demo.ps1`; no requiere Git ni una instalación global de Node.js. La distribución no incluye credenciales.
+
 ## Límites del demo
 
 WhatsApp personal puede utilizarse para enviar un mensaje real durante la presentación, pero se registra manualmente en el laboratorio. La automatización futura debe usar la plataforma oficial de WhatsApp Business con un número de negocio dedicado.
