@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import "./simphony-admin.css";
+import "./redwood-status.css";
 
 type Config=Record<"apiBaseUrl"|"oidcBaseUrl"|"clientId"|"username"|"password"|"orgShortName"|"locRef"|"rvcRef"|"employeeRef"|"orderTypeRef"|"orderChannelRef"|"menuId"|"menuItemId"|"quantity",string>;
 type Action="test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu";
