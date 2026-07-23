@@ -67,7 +67,7 @@ async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
 
 async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId?:number, settleTender=false) {
   if (!config.employeeRef || !config.orderTypeRef) throw new Error("La sesion necesita checkEmployeeRef y orderTypeRef para crear un check.");
-  const informationLines = (draft.informationLines || []).map(line => line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
+  const informationLines = (draft.informationLines || []).map(line => line.trim()==="Cliente: Consumidor final" ? "Cliente: Web" : line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
   const payload = {
     header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName:`WEB-${Date.now().toString().slice(-10)}`, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
     menuItems:draft.items.map(item => ({ menuItemId:item.menuItemId, definitionSequence:item.definitionSequence, quantity:item.quantity, ...(item.condiments?.length ? { condiments:item.condiments } : {}) })),

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import "./commerce.css";
+import "./payment-choice.css";
 
 type Channel="Web"|"WhatsApp"|"POS";
 type Modifier={condimentId:number;definitionSequence:number;name:string;price:number};
@@ -16,6 +17,7 @@ const errorText=(value:unknown)=>{const row=value&&typeof value==="object"?value
 export default function Home(){
  const [catalog,setCatalog]=useState<Product[]>(demo),[cart,setCart]=useState<Line[]>([]),[tenders,setTenders]=useState<Tender[]>([]),[method,setMethod]=useState(""),[session,setSession]=useState<string>(),[source,setSource]=useState(false),[search,setSearch]=useState(""),[channel,setChannel]=useState<Channel>("Web"),[customer,setCustomer]=useState(""),[notes,setNotes]=useState(""),[busy,setBusy]=useState(false),[notice,setNotice]=useState("Activa tu catálogo desde Admin Simphony para operar con productos reales."),[confirmation,setConfirmation]=useState<Confirmation>();
  useEffect(()=>{const id=sessionStorage.getItem("omniorder.simphonySession");if(!id)return;setSession(id);void load(id);},[]);
+ useEffect(()=>{if(!customer)setCustomer("Web");},[]);
  useEffect(()=>{if(!confirmation)return;try{const current=JSON.parse(sessionStorage.getItem("omniorder.orderLog")||"[]");const entry={time:new Date().toLocaleTimeString(),action:"createTrainingCheck",status:200,ok:true,elapsed:0,message:`Check #${confirmation.checkNumber||"—"} ${confirmation.status||"confirmado"}`};sessionStorage.setItem("omniorder.orderLog",JSON.stringify([entry,...current].slice(0,12)));}catch{}},[confirmation]);
  useEffect(()=>{if(!/rechaz|unable|no se pudo/i.test(notice))return;try{const current=JSON.parse(sessionStorage.getItem("omniorder.orderLog")||"[]");const entry={time:new Date().toLocaleTimeString(),action:"createTrainingCheck",status:400,ok:false,elapsed:0,message:notice};sessionStorage.setItem("omniorder.orderLog",JSON.stringify([entry,...current].slice(0,12)));}catch{}},[notice]);
  async function load(id:string){setBusy(true);try{const res=await fetch("/api/simphony",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"catalog",sessionId:id})});const data=await res.json();if(!data.ok)throw Error(data.message);const items=(data.catalog as Product[]).filter(x=>x.objNum>=range.min&&x.objNum<=range.max);const payments=(data.tenders as Tender[]).filter(x=>/cash|efectivo|card|tarjeta|credit|debit/i.test(`${x.name} ${x.type}`));setCatalog(items);setTenders(payments);setMethod(payments[0]?.name||"");setSource(true);setNotice(`Catálogo sincronizado: ${items.length} productos. Elige cómo pagar al recoger.`);}catch(e){sessionStorage.removeItem("omniorder.simphonySession");setNotice(e instanceof Error?e.message:"No fue posible cargar Simphony.");}finally{setBusy(false);}}
