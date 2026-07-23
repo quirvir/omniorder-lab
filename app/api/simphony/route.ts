@@ -62,7 +62,10 @@ async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
   const tender=session.tenders.find(item=>item.name===draft?.paymentMethod);
   if (!tender) throw new Error("Selecciona una forma de pago habilitada para este e-commerce.");
   const token = await authenticate(session.config);
-  return postCheck(session.config, token, draft, tender.tenderId, isCardTender(tender));
+  if (isCardTender(tender)) return postCheck(session.config, token, draft, tender.tenderId, true);
+  const serviceTotal=session.tenders.find(item=>item.type.toLowerCase()==="servicetotal");
+  if (!serviceTotal) throw new Error("Este RVC necesita un tender serviceTotal para crear checks abiertos con Cash.");
+  return postCheck(session.config, token, draft, serviceTotal.tenderId, false);
 }
 
 async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId?:number, settleTender=false) {
@@ -99,7 +102,7 @@ function normalizeTenders(value:unknown):Tender[] {
   const root=record(value); const values=asArray(root.tenders ?? root.items ?? root.collection ?? value);
   return values.map(item=>{const row=record(item);return { tenderId:numberOf(row.tenderId ?? row.id ?? row.tenderRef), name:textOf(row.name ?? row.tenderName ?? row.displayName) || "Tender", type:textOf(row.type ?? row.tenderType ?? row.serviceType) || "payment" };}).filter(tender=>tender.tenderId);
 }
-function selectedTenders(tenders:Tender[], config:Config):Tender[] { if(config.tenderDisplayMode==="all") return tenders; const enabled=new Set((config.enabledTenderIds||config.tenderId||"").split(",").map(value=>Number(value.trim())).filter(Boolean)); return tenders.filter(tender=>enabled.has(tender.tenderId)); }
+function selectedTenders(tenders:Tender[], config:Config):Tender[] { if(config.tenderDisplayMode==="all") return tenders; const enabled=new Set((config.enabledTenderIds||config.tenderId||"").split(",").map(value=>Number(value.trim())).filter(Boolean)); return tenders.filter(tender=>enabled.has(tender.tenderId)||tender.type.toLowerCase()==="servicetotal"); }
 function isCardTender(tender:Tender) { return /card|tarjeta|credit|debit|visa|mastercard|amex/i.test(`${tender.name} ${tender.type}`); }
 
 function record(value:unknown):Record<string,unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string,unknown> : {}; }
