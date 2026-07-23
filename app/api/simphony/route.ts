@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-type Config = { apiBaseUrl:string; oidcBaseUrl:string; clientId:string; username:string; password:string; orgShortName:string; locRef:string; rvcRef:string; employeeRef:string; orderTypeRef:string; orderChannelRef?:string; tenderId?:string; enabledTenderIds?:string; tenderDisplayMode?:"configured"|"all"; menuId?:string; menuItemId?:string; quantity?:string };
+type Config = { apiBaseUrl:string; oidcBaseUrl:string; clientId:string; username:string; password:string; orgShortName:string; locRef:string; rvcRef:string; employeeRef:string; orderTypeRef:string; orderChannelRef?:string; tenderId?:string; enabledTenderIds?:string; tenderDisplayMode?:"configured"|"all"; menuScope?:"all"|"range"; menuObjNumMin?:string; menuObjNumMax?:string; menuId?:string; menuItemId?:string; quantity?:string };
 type Modifier = { condimentId:number; definitionSequence:number; name:string; price:number };
 type ModifierGroup = { id:number; name:string; minimumCount:number; maximumCount:number; items:Modifier[] };
 type CatalogItem = { menuItemId:number; objNum:number; definitionSequence:number; name:string; description:string; price:number; imageUrl?:string; imageAlt?:string; modifierGroups:ModifierGroup[] };
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       const response = await menuApi(config, token, `/menus/${encodeURIComponent(config.menuId)}`);
       const data = await json(response);
       if (!response.ok) return NextResponse.json({ ok:false, status:response.status, message:`Simphony no pudo devolver el menu ${config.menuId} (HTTP ${response.status}). Verifica que sea el menuId exacto expuesto por STS para este RVC.`, data }, { status:response.status });
-      const catalog = normalizeMenu(data);
+      const catalog = filterCatalog(normalizeMenu(data), config);
       if (body.action === "menu") return NextResponse.json({ ok:true, status:response.status, message:`Menu sincronizado: ${catalog.length} productos listos para e-commerce.`, catalog, data });
       const tenderResponse = await api(config, token, `/tenders/collection?orgShortName=${encodeURIComponent(config.orgShortName)}&locRef=${encodeURIComponent(config.locRef)}&rvcRef=${encodeURIComponent(config.rvcRef)}`);
       const tenderData = await json(tenderResponse);
@@ -104,6 +104,7 @@ function normalizeTenders(value:unknown):Tender[] {
   return values.map(item=>{const row=record(item);return { tenderId:numberOf(row.tenderId ?? row.id ?? row.tenderRef), name:textOf(row.name ?? row.tenderName ?? row.displayName) || "Tender", type:textOf(row.type ?? row.tenderType ?? row.serviceType) || "payment" };}).filter(tender=>tender.tenderId);
 }
 function selectedTenders(tenders:Tender[], config:Config):Tender[] { if(config.tenderDisplayMode==="all") return tenders; const enabled=new Set((config.enabledTenderIds||config.tenderId||"").split(",").map(value=>Number(value.trim())).filter(Boolean)); return tenders.filter(tender=>enabled.has(tender.tenderId)||tender.type.toLowerCase()==="servicetotal"); }
+function filterCatalog(catalog:CatalogItem[], config:Config) { if(config.menuScope!=="range") return catalog; const min=Number(config.menuObjNumMin),max=Number(config.menuObjNumMax); if(!Number.isFinite(min)||!Number.isFinite(max)||min>max) throw new Error("Define un rango objNum válido: mínimo menor o igual al máximo."); return catalog.filter(item=>item.objNum>=min&&item.objNum<=max); }
 function isCardTender(tender:Tender) { return /card|tarjeta|credit|debit|visa|mastercard|amex/i.test(`${tender.name} ${tender.type}`); }
 function uniqueCheckName(value?:string) { const base=(value||"Web").trim().replace(/[^a-z0-9 ._-]/gi,"").replace(/\s+/g," ").slice(0,12)||"Web"; return `${base}-${Date.now().toString().slice(-6)}`.slice(0,20); }
 

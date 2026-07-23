@@ -19,7 +19,6 @@ const demo:Product[] = [
   { menuItemId:2,objNum:2,definitionSequence:0,name:"Pollo crispy",description:"Pollo crujiente, papas y salsa",price:59,modifierGroups:[] },
   { menuItemId:3,objNum:3,definitionSequence:0,name:"Cafe americano",description:"Tueste local, 12 oz",price:23,modifierGroups:[] },
 ];
-const range = { min:1103011, max:1103043 };
 const errorText = (value:unknown) => { const row=value&&typeof value==="object" ? value as Record<string,unknown> : {}; const data=row.data&&typeof row.data==="object" ? row.data as Record<string,unknown> : {}; return String(data.message||data.detail||row.message||"Simphony rechazó la orden."); };
 const isCard = (tender?:Tender) => /card|tarjeta|credit|debit|visa|mastercard|amex/i.test(`${tender?.name||""} ${tender?.type||""}`);
 
@@ -44,7 +43,7 @@ export default function Home() {
   useEffect(() => { if(/rechaz|unable|no se pudo/i.test(notice))writeLog(false,400,notice); }, [notice]);
 
   function writeLog(ok:boolean,status:number,message:string) { try { const current=JSON.parse(sessionStorage.getItem("omniorder.orderLog")||"[]"); sessionStorage.setItem("omniorder.orderLog",JSON.stringify([{time:new Date().toLocaleTimeString(),action:"createTrainingCheck",status,ok,elapsed:0,message},...current].slice(0,12))); } catch {} }
-  async function load(id:string) { setBusy(true); try { const res=await fetch("/api/simphony",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"catalog",sessionId:id})}); const data=await res.json(); if(!data.ok)throw Error(data.message); const items=(data.catalog as Product[]).filter(x=>x.objNum>=range.min&&x.objNum<=range.max); const payments=(data.tenders as Tender[]).filter(x=>/cash|efectivo|card|tarjeta|credit|debit/i.test(`${x.name} ${x.type}`)); setCatalog(items); setTenders(payments); setMethod(payments[0]?.name||""); setSource(true); setNotice(`Catálogo sincronizado: ${items.length} productos. Elige cómo pagar al recoger.`); } catch(e) { sessionStorage.removeItem("omniorder.simphonySession"); setNotice(e instanceof Error?e.message:"No fue posible cargar Simphony."); } finally { setBusy(false); } }
+  async function load(id:string) { setBusy(true); try { const res=await fetch("/api/simphony",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"catalog",sessionId:id})}); const data=await res.json(); if(!data.ok)throw Error(data.message); const items=data.catalog as Product[]; const payments=(data.tenders as Tender[]).filter(x=>/cash|efectivo|card|tarjeta|credit|debit/i.test(`${x.name} ${x.type}`)); setCatalog(items); setTenders(payments); setMethod(payments[0]?.name||""); setSource(true); setNotice(`Catálogo sincronizado: ${items.length} productos. Elige cómo pagar al recoger.`); } catch(e) { sessionStorage.removeItem("omniorder.simphonySession"); setNotice(e instanceof Error?e.message:"No fue posible cargar Simphony."); } finally { setBusy(false); } }
 
   const products = useMemo(() => catalog.filter(x=>`${x.name} ${x.description}`.toLowerCase().includes(search.toLowerCase())),[catalog,search]);
   const total = useMemo(() => cart.reduce((sum,line)=>sum+(line.product.price+line.modifiers.reduce((a,m)=>a+m.price,0))*line.quantity,0),[cart]);
