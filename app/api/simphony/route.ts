@@ -62,16 +62,16 @@ async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
   const tender=session.tenders.find(item=>item.name===draft?.paymentMethod);
   if (!tender) throw new Error("Selecciona una forma de pago habilitada para este e-commerce.");
   const token = await authenticate(session.config);
-  return postCheck(session.config, token, draft, isCardTender(tender) ? tender.tenderId : undefined);
+  return postCheck(session.config, token, draft, tender.tenderId, isCardTender(tender));
 }
 
-async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId?:number) {
+async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId?:number, settleTender=false) {
   if (!config.employeeRef || !config.orderTypeRef) throw new Error("La sesion necesita checkEmployeeRef y orderTypeRef para crear un check.");
   const informationLines = (draft.informationLines || []).map(line => line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
   const payload = {
     header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName:`WEB-${Date.now().toString().slice(-10)}`, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
     menuItems:draft.items.map(item => ({ menuItemId:item.menuItemId, definitionSequence:item.definitionSequence, quantity:item.quantity, ...(item.condiments?.length ? { condiments:item.condiments } : {}) })),
-    ...(tenderId ? { tenders:[{ tenderId, total:0 }] } : {}),
+    ...(tenderId ? { tenders:[{ tenderId, ...(settleTender ? { total:0 } : {}) }] } : {}),
   };
   const response = await api(config, token, "/checks", { method:"POST", body:JSON.stringify(payload), headers:{ "Content-Type":"application/json", "Simphony-Features":"detect-duplicate-request,enable-condiment-prefix" } });
   const data = await json(response);
