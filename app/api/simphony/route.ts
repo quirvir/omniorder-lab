@@ -59,18 +59,19 @@ export async function POST(request: Request) {
 
 async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
   if (!draft?.items?.length) throw new Error("Agrega al menos un producto antes de enviar la orden.");
-  if (!draft.paymentMethod || !session.tenders.some(tender=>tender.name===draft.paymentMethod)) throw new Error("Selecciona una forma de pago habilitada para este e-commerce.");
+  const tender=session.tenders.find(item=>item.name===draft?.paymentMethod);
+  if (!tender) throw new Error("Selecciona una forma de pago habilitada para este e-commerce.");
   const token = await authenticate(session.config);
-  return postCheck(session.config, token, draft, false);
+  return postCheck(session.config, token, draft, isCardTender(tender) ? tender.tenderId : undefined);
 }
 
-async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, applyTender=false) {
+async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId?:number) {
   if (!config.employeeRef || !config.orderTypeRef) throw new Error("La sesion necesita checkEmployeeRef y orderTypeRef para crear un check.");
   const informationLines = (draft.informationLines || []).map(line => line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
   const payload = {
     header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName:`WEB-${Date.now().toString().slice(-10)}`, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
     menuItems:draft.items.map(item => ({ menuItemId:item.menuItemId, definitionSequence:item.definitionSequence, quantity:item.quantity, ...(item.condiments?.length ? { condiments:item.condiments } : {}) })),
-    ...(applyTender && config.tenderId ? { tenders:[{ tenderId:Number(config.tenderId), total:0 }] } : {}),
+    ...(tenderId ? { tenders:[{ tenderId, total:0 }] } : {}),
   };
   const response = await api(config, token, "/checks", { method:"POST", body:JSON.stringify(payload), headers:{ "Content-Type":"application/json", "Simphony-Features":"detect-duplicate-request,enable-condiment-prefix" } });
   const data = await json(response);
@@ -99,6 +100,7 @@ function normalizeTenders(value:unknown):Tender[] {
   return values.map(item=>{const row=record(item);return { tenderId:numberOf(row.tenderId ?? row.id ?? row.tenderRef), name:textOf(row.name ?? row.tenderName ?? row.displayName) || "Tender", type:textOf(row.type ?? row.tenderType ?? row.serviceType) || "payment" };}).filter(tender=>tender.tenderId);
 }
 function selectedTenders(tenders:Tender[], config:Config):Tender[] { if(config.tenderDisplayMode==="all") return tenders; const enabled=new Set((config.enabledTenderIds||config.tenderId||"").split(",").map(value=>Number(value.trim())).filter(Boolean)); return tenders.filter(tender=>enabled.has(tender.tenderId)); }
+function isCardTender(tender:Tender) { return /card|tarjeta|credit|debit|visa|mastercard|amex/i.test(`${tender.name} ${tender.type}`); }
 
 function record(value:unknown):Record<string,unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string,unknown> : {}; }
 function asArray(value:unknown):unknown[] { return Array.isArray(value) ? value : []; }
