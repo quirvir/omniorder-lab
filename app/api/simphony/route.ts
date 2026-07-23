@@ -6,7 +6,7 @@ type ModifierGroup = { id:number; name:string; minimumCount:number; maximumCount
 type CatalogItem = { menuItemId:number; objNum:number; definitionSequence:number; name:string; description:string; price:number; imageUrl?:string; imageAlt?:string; modifierGroups:ModifierGroup[] };
 type DraftItem = { menuItemId:number; definitionSequence:number; quantity:number; condiments?:{condimentId:number;definitionSequence:number;quantity:number}[] };
 type Tender = { tenderId:number; name:string; type:string };
-type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"tenders"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[];paymentMethod?:string} };
+type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"tenders"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[];paymentMethod?:string;checkName?:string} };
 type Session = { config:Config; catalog:CatalogItem[]; tenders:Tender[]; expiresAt:number };
 
 const sessions = new Map<string, Session>();
@@ -68,11 +68,12 @@ async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
   return postCheck(session.config, token, draft, serviceTotal.tenderId, false);
 }
 
-async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId?:number, settleTender=false) {
+async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[];checkName?:string}, tenderId?:number, settleTender=false) {
   if (!config.employeeRef || !config.orderTypeRef) throw new Error("La sesion necesita checkEmployeeRef y orderTypeRef para crear un check.");
   const informationLines = (draft.informationLines || []).map(line => line.trim()==="Cliente: Consumidor final" ? "Cliente: Web" : line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
+  const checkName=uniqueCheckName(draft.checkName);
   const payload = {
-    header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName:`WEB-${Date.now().toString().slice(-10)}`, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
+    header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
     menuItems:draft.items.map(item => ({ menuItemId:item.menuItemId, definitionSequence:item.definitionSequence, quantity:item.quantity, ...(item.condiments?.length ? { condiments:item.condiments } : {}) })),
     ...(tenderId ? { tenders:[{ tenderId, ...(settleTender ? { total:0 } : {}) }] } : {}),
   };
@@ -104,6 +105,7 @@ function normalizeTenders(value:unknown):Tender[] {
 }
 function selectedTenders(tenders:Tender[], config:Config):Tender[] { if(config.tenderDisplayMode==="all") return tenders; const enabled=new Set((config.enabledTenderIds||config.tenderId||"").split(",").map(value=>Number(value.trim())).filter(Boolean)); return tenders.filter(tender=>enabled.has(tender.tenderId)||tender.type.toLowerCase()==="servicetotal"); }
 function isCardTender(tender:Tender) { return /card|tarjeta|credit|debit|visa|mastercard|amex/i.test(`${tender.name} ${tender.type}`); }
+function uniqueCheckName(value?:string) { const base=(value||"Web").trim().replace(/[^a-z0-9 ._-]/gi,"").replace(/\s+/g," ").slice(0,12)||"Web"; return `${base}-${Date.now().toString().slice(-6)}`.slice(0,20); }
 
 function record(value:unknown):Record<string,unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string,unknown> : {}; }
 function asArray(value:unknown):unknown[] { return Array.isArray(value) ? value : []; }
