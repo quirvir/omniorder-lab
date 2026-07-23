@@ -6,7 +6,7 @@ type ModifierGroup = { id:number; name:string; minimumCount:number; maximumCount
 type CatalogItem = { menuItemId:number; objNum:number; definitionSequence:number; name:string; description:string; price:number; imageUrl?:string; imageAlt?:string; modifierGroups:ModifierGroup[] };
 type DraftItem = { menuItemId:number; definitionSequence:number; quantity:number; condiments?:{condimentId:number;definitionSequence:number;quantity:number}[] };
 type Tender = { tenderId:number; name:string; type:string };
-type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"tenders"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[];tenderId?:number} };
+type Body = { action:"test"|"menuSummary"|"menu"|"trainingCheck"|"activateMenu"|"tenders"|"catalog"|"createTrainingCheck"; config?:Config; sessionId?:string; draft?:{items:DraftItem[];informationLines?:string[];paymentMethod?:string} };
 type Session = { config:Config; catalog:CatalogItem[]; tenders:Tender[]; expiresAt:number };
 
 const sessions = new Map<string, Session>();
@@ -59,24 +59,23 @@ export async function POST(request: Request) {
 
 async function createTrainingCheck(session:Session, draft?:Body["draft"]) {
   if (!draft?.items?.length) throw new Error("Agrega al menos un producto antes de enviar la orden.");
-  const tenderId=Number(draft.tenderId||session.config.tenderId);
-  if (!tenderId || !session.tenders.some(tender=>tender.tenderId===tenderId)) throw new Error("Selecciona una forma de pago habilitada para este e-commerce.");
+  if (!draft.paymentMethod || !session.tenders.some(tender=>tender.name===draft.paymentMethod)) throw new Error("Selecciona una forma de pago habilitada para este e-commerce.");
   const token = await authenticate(session.config);
-  return postCheck(session.config, token, draft, tenderId);
+  return postCheck(session.config, token, draft, false);
 }
 
-async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, tenderId=Number(config.tenderId)) {
+async function postCheck(config:Config, token:string, draft:{items:DraftItem[];informationLines?:string[]}, applyTender=false) {
   if (!config.employeeRef || !config.orderTypeRef) throw new Error("La sesion necesita checkEmployeeRef y orderTypeRef para crear un check.");
-  if (!Number.isFinite(tenderId) || tenderId<=0) throw new Error("El tender seleccionado no es valido.");
   const informationLines = (draft.informationLines || []).map(line => line.trim()).filter(Boolean).slice(0, 4).map(line => line.slice(0, 255));
   const payload = {
     header:{ orgShortName:config.orgShortName, locRef:config.locRef, rvcRef:Number(config.rvcRef), checkEmployeeRef:Number(config.employeeRef), orderTypeRef:Number(config.orderTypeRef), ...(config.orderChannelRef ? { orderChannelRef:Number(config.orderChannelRef) } : {}), idempotencyId:crypto.randomUUID().replaceAll("-", ""), checkName:`WEB-${Date.now().toString().slice(-10)}`, guestCount:1, isTrainingCheck:true, ...(informationLines.length ? { informationLines } : {}) },
     menuItems:draft.items.map(item => ({ menuItemId:item.menuItemId, definitionSequence:item.definitionSequence, quantity:item.quantity, ...(item.condiments?.length ? { condiments:item.condiments } : {}) })),
-    tenders:[{ tenderId, total:0 }],
+    ...(applyTender && config.tenderId ? { tenders:[{ tenderId:Number(config.tenderId), total:0 }] } : {}),
   };
   const response = await api(config, token, "/checks", { method:"POST", body:JSON.stringify(payload), headers:{ "Content-Type":"application/json", "Simphony-Features":"detect-duplicate-request,enable-condiment-prefix" } });
   const data = await json(response);
-  return NextResponse.json({ ok:response.ok, status:response.status, message:response.ok ? "Training check creado en Simphony." : "Simphony rechazo el training check.", data, payload }, { status:response.ok ? 200 : response.status });
+  const header=record(record(data).header); const confirmation={ checkNumber:numberOf(header.checkNumber), checkRef:textOf(header.checkRef), checkName:textOf(header.checkName), status:textOf(header.status)||"open", totalDue:numberOf(record(data).totals && record(data).totals.totalDue) };
+  return NextResponse.json({ ok:response.ok, status:response.status, message:response.ok ? `Pedido confirmado${confirmation.checkNumber?`: check #${confirmation.checkNumber}`:""}.` : "Simphony rechazo el training check.", data, payload, confirmation }, { status:response.ok ? 200 : response.status });
 }
 
 function catalogResponse(session:Session) { return NextResponse.json({ ok:true, message:`Catalogo Simphony activo: ${session.catalog.length} productos.`, catalog:session.catalog, tenders:session.tenders, expiresAt:session.expiresAt }); }
