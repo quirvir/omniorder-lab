@@ -1,5 +1,7 @@
 # OmniOrder Lab
 
+> Hito integrado: pedidos Web, WhatsApp simulado y voz llegan a Simphony por STS Gen 2 Cloud, con checks abiertos/cerrados verificados en KDS/POS. Consulta [el detalle del hito](docs/MILESTONE-STS-GEN2.md).
+
 Laboratorio de comercio omnicanal para demostrar una orden única desde Web, POS, WhatsApp y audio, con trazabilidad hacia operación (Simphony) y facturación (STS Gen 2).
 
 ## Alcance de esta primera versión

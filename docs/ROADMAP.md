@@ -1,5 +1,17 @@
 # Roadmap
 
+## Hito 1 - Integracion de laboratorio completada
+
+La orden omnicanal ya llega a Oracle Simphony por STS Gen 2 Cloud. Incluye catalogo, categorias, imagenes, modificadores, notas, nombre de orden, efectivo/check abierto, tarjeta/check cerrado, KDS/POS y registro local de actividad. Ver [validacion del hito](MILESTONE-STS-GEN2.md).
+
+## Proximo paso - Consolidacion del demo
+
+1. Ejecutar regresion de punta a punta para Web, WhatsApp simulado y voz.
+2. Validar reglas de modificadores: minimos, maximos, sustituciones y precios.
+3. Curar un catalogo de demostracion por marca/categoria y contenido visual consistente.
+4. Preparar guion de demo, evidencia QA y material comercial para clientes.
+5. Endurecer el diagnostico de Service Host/POS no disponible.
+
 ## Fase 0 — Demo segura (actual)
 
 Interfaz, flujo por voz y simuladores. Sin integraciones productivas ni cuentas personales automatizadas.

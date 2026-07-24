@@ -29,3 +29,20 @@ Para cada caso: ID de prueba, fecha, navegador/dispositivo, datos ficticios usad
 - Ningún flujo crea una orden sin confirmación explícita.
 - Ninguna pantalla expone secretos, tokens ni PII real.
 - Los mensajes de integración se presentan claramente como simulados.
+# Hito validado en laboratorio
+
+Se aprobo conectividad STS Gen 2 Cloud, sincronizacion de catalogo, pedido Web/WhatsApp/voz, modificadores, notas y los dos desenlaces de pago: check abierto con efectivo y check cerrado con tarjeta. Las ordenes fueron verificadas en KDS y POS.
+
+## Casos de regresion del hito
+
+| ID | Escenario | Resultado esperado |
+|---|---|---|
+| INT-01 | Validar conexion | OIDC, Revenue Center y tenders responden correctamente. |
+| INT-02 | Sincronizar catalogo | Se visualizan los productos del alcance configurado con imagenes, precios y modificadores. |
+| INT-03 | Modificadores y notas | Las selecciones permitidas y `informationLines` llegan a Simphony. |
+| INT-04 | Efectivo | Crea un check abierto visible en POS/KDS para cobrar al recoger. |
+| INT-05 | Tarjeta | Aplica el tender configurado y crea un check cerrado. |
+| INT-06 | Nombre de orden | Se muestra en POS/KDS. |
+| INT-07 | Falla operativa | Ante un 4xx/5xx se informa el fallo y se registra Actividad sin credenciales. |
+
+> Diagnostico: si el catalogo sincroniza pero el posteo devuelve `503 User is not available`, verificar primero POS Service Host y workstation en el CAP.
